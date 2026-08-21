@@ -1,13 +1,18 @@
-# dsh-plugin-manager — Windows 安装脚本
+# install.ps1 — install dsh-plugin-manager into DeepSeek Harness (Windows)
 #
-# 作用：把本插件挂载到当前 dsh 部署，启动 dsh 后自动加载（设置页「第三方插件」）。
-#   1. 在 $DSH_HOME/profiles/node_modules 下建立 junction 指向本插件目录
-#   2. 在 $DSH_HOME/profiles/web/cordis.patch.yml 追加 insert row（幂等，不重复）
-#   3. 提示重启 dsh
-#
-# 用法：
+# Usage (inside the cloned directory):
 #   powershell -ExecutionPolicy Bypass -File install.ps1
-#   （可用 -DshHome <路径> 覆盖 DSH_HOME，默认取 $env:DSH_HOME 或 $env:USERPROFILE\.dsh）
+#   # or override DSH home / profile:
+#   powershell -ExecutionPolicy Bypass -File install.ps1 -DshHome C:\Users\you\.dsh
+#   $env:DSH_PROFILE='headless'; powershell -ExecutionPolicy Bypass -File install.ps1
+#
+# It does two things, idempotently:
+#   1. links the package into node_modules:
+#        $DSH_HOME/profiles/node_modules/dsh-plugin-manager  ->  this directory
+#   2. appends an insert row to $DSH_HOME/profiles/<profile>/cordis.patch.yml
+#
+# $DSH_HOME defaults to $env:DSH_HOME, else $HOME\.dsh.
+# $DSH_PROFILE defaults to 'web'; set it to install into another profile.
 
 param(
   [string]$DshHome = ''
@@ -15,66 +20,57 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-# ---- resolve DSH_HOME ----
+# ---- resolve DSH home ----
 if ($DshHome -eq '') { $DshHome = $env:DSH_HOME }
-if ($DshHome -eq '') { $DshHome = Join-Path $env:USERPROFILE '.dsh' }
-if (-not (Test-Path $DshHome)) {
-  Write-Host "ERROR: DSH home not found: $DshHome (set -DshHome or DSH_HOME)" -ForegroundColor Red
+if ($DshHome -eq '') { $DshHome = Join-Path $HOME '.dsh' }
+
+$Profile = if ($env:DSH_PROFILE) { $env:DSH_PROFILE } else { 'web' }
+$ProfileDir = Join-Path $DshHome "profiles\$Profile"
+
+if (-not (Test-Path $ProfileDir)) {
+  Write-Host "[dsh-plugin-manager] profile dir not found: $ProfileDir" -ForegroundColor Yellow
+  Write-Host "  Run dsh at least once first (npx dsh web), then re-run this script." -ForegroundColor Yellow
   exit 1
 }
 
-$pluginName = 'dsh-plugin-manager'
-$pluginSource = $PSScriptRoot
-$profilesNodeModules = Join-Path $DshHome 'profiles\node_modules'
-$target = Join-Path $profilesNodeModules $pluginName
-$profileWeb = Join-Path $DshHome 'profiles\web'
-$patchFile = Join-Path $profileWeb 'cordis.patch.yml'
+# ---- 1) node_modules junction -> plugin directory ----
+$PluginDir = $PSScriptRoot
+$NodeModules = Join-Path $DshHome 'profiles\node_modules'
+if (-not (Test-Path $NodeModules)) { New-Item -ItemType Directory -Path $NodeModules -Force | Out-Null }
+$Link = Join-Path $NodeModules 'dsh-plugin-manager'
 
-Write-Host "DSH home       : $DshHome"
-Write-Host "Plugin source  : $pluginSource"
-
-# ---- 1. junction into profiles/node_modules ----
-if (-not (Test-Path $profilesNodeModules)) {
-  New-Item -ItemType Directory -Path $profilesNodeModules -Force | Out-Null
-}
-if (Test-Path $target) {
-  $item = Get-Item $target -Force
-  if ($item.LinkType -eq 'Junction' -and $item.Target -eq $pluginSource) {
-    Write-Host "[ok] junction already points at this source: $target" -ForegroundColor Green
-  } else {
-    Write-Host "WARN: $target exists but is not a junction to this source; leaving it in place." -ForegroundColor Yellow
-    Write-Host "      Remove it first if you want this install to manage the link." -ForegroundColor Yellow
+if (Test-Path $Link) {
+  $item = Get-Item $Link -Force
+  if ($item.LinkType -eq 'Junction') {
+    if ($item.Target -eq $PluginDir) {
+      Write-Host "[dsh-plugin-manager] already linked to this directory." -ForegroundColor Green
+    } else {
+      cmd /c rmdir "$Link" | Out-Null
+      New-Item -ItemType Junction -Path $Link -Target $PluginDir | Out-Null
+      Write-Host "[dsh-plugin-manager] junction updated -> $PluginDir" -ForegroundColor Green
+    }
+  } elseif ($item.PSIsContainer) {
+    Write-Host "[dsh-plugin-manager] $Link is a real directory (not a junction); remove it manually, then re-run." -ForegroundColor Red
+    exit 1
   }
 } else {
-  New-Item -ItemType Junction -Path $target -Target $pluginSource | Out-Null
-  Write-Host "[ok] junction created: $target" -ForegroundColor Green
+  New-Item -ItemType Junction -Path $Link -Target $PluginDir | Out-Null
+  Write-Host "[dsh-plugin-manager] junction created: $Link -> $PluginDir" -ForegroundColor Green
 }
 
-# ---- 2. patch insert row (idempotent) ----
-$block = @"
+# ---- 2) append insert row to cordis.patch.yml ----
+$Patch = Join-Path $ProfileDir 'cordis.patch.yml'
+$content = if (Test-Path $Patch) { Get-Content $Patch -Raw } else { '' }
 
-# dsh plugin manager — 第三方插件管理器（设置页「第三方插件」）
-# 前置：`$DshHome`/profiles/node_modules/$pluginName -> $pluginSource
-- insert:
-    - id: $pluginName
-      name: '$pluginName'
-"@
-
-if (-not (Test-Path $patchFile)) {
-  New-Item -ItemType Directory -Path $profileWeb -Force | Out-Null
-  Set-Content -Path $patchFile -Value $block -Encoding UTF8
-  Write-Host "[ok] created $patchFile with insert row" -ForegroundColor Green
+if ($content -match 'id:\s*dsh-plugin-manager') {
+  Write-Host "[dsh-plugin-manager] cordis.patch.yml already contains this plugin row; skipped." -ForegroundColor Green
 } else {
-  $text = Get-Content $patchFile -Raw
-  if ($text -match "name: '$pluginName'") {
-    Write-Host "[ok] insert row already present in $patchFile" -ForegroundColor Green
-  } else {
-    $sep = if ($text.EndsWith("`n")) { '' } else { "`n" }
-    Add-Content -Path $patchFile -Value ($sep + $block) -Encoding UTF8
-    Write-Host "[ok] appended insert row to $patchFile" -ForegroundColor Green
-  }
+  $block = "`n# dsh plugin manager - host composition (settings page: third-party plugins)`n- insert:`n    - id: dsh-plugin-manager`n      name: 'dsh-plugin-manager'`n"
+  Add-Content -Path $Patch -Value $block
+  Write-Host "[dsh-plugin-manager] wrote: $Patch" -ForegroundColor Green
 }
 
 Write-Host ""
-Write-Host "Install complete. Restart dsh, then open Settings -> 第三方插件." -ForegroundColor Cyan
-Write-Host "Host half (webServer routes) loads on boot; the settings page loads after restart + browser refresh." -ForegroundColor Cyan
+Write-Host "[dsh-plugin-manager] Install complete." -ForegroundColor Green
+Write-Host "  Restart dsh: press Ctrl+C on the running dsh, then run: npx dsh web"
+Write-Host "  After restart: Settings -> 第三方插件 page appears (pick a plugin library folder, scan, enable/disable)."

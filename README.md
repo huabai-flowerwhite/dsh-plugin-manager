@@ -35,40 +35,57 @@ dsh-plugin-manager/
 3. 点击「选择文件夹」选择第三方插件库文件夹（或手动粘贴路径），点击「扫描」。
 4. 在列表中点击「关闭 / 启动」切换插件状态，重启 dsh 后生效。
 
-## 安装（host composition 挂载）
+## 安装（一条命令）
 
-本插件是 **npm 包 + host composition row** 形态（与 dsh-plugin-design 相同）。
+本插件是 **npm 包 + host composition row** 形态：设置页「第三方插件」全局加载，重启后自动加载。
 
-### 方式一：一键安装脚本（推荐，其他用户用这个）
+下载后，在插件目录内运行对应脚本，即可自动完成「链接进 node_modules + 写入 cordis.patch.yml」两步：
 
-```bash
-# Windows
+**Windows（PowerShell）**
+
+```powershell
+git clone <你的仓库> dsh-plugin-manager
+cd dsh-plugin-manager
 powershell -ExecutionPolicy Bypass -File install.ps1
-# macOS / Linux
-bash install.sh
-# 可指定 DSH home：
-powershell -ExecutionPolicy Bypass -File install.ps1 -DshHome C:\Users\you\.dsh
-DSH_HOME=/home/you/.dsh bash install.sh
 ```
 
-脚本自动完成：① 在 `$DSH_HOME/profiles/node_modules` 建立 junction/symlink 指向本目录；② 在 `$DSH_HOME/profiles/web/cordis.patch.yml` 追加 insert row（幂等，重复运行不产生重复行）；③ 提示重启。运行结束后**重启 dsh** 即生效。
+**Linux / macOS（bash）**
 
-### 方式二：手动安装
+```bash
+git clone <你的仓库> dsh-plugin-manager
+cd dsh-plugin-manager
+bash install.sh
+```
 
-1. 把包放进 node_modules（本机用 junction/symlink）：
+脚本是幂等的（重复运行无害）。装完后**重启 dsh**（Ctrl+C 后重新 `npx dsh web` / `dsh web`），即完整可用：「设置 → 第三方插件」出现设置页（选文件夹扫描第三方插件、启停）。
+
+### 脚本做了什么（手动安装等价步骤）
+
+1. 把本目录链接进 node_modules：
    ```text
    $DSH_HOME/profiles/node_modules/dsh-plugin-manager  ->  本目录
    ```
-   或发布到 npm 后 `npm install dsh-plugin-manager`。
-
-2. 在 `$DSH_HOME/profiles/web/cordis.patch.yml` 加 insert row：
+   （`$DSH_HOME` 默认 `~/.dsh`；Windows 用 junction，Linux/macOS 用 symlink。或发布到 npm 后 `npm install dsh-plugin-manager` 亦可。）
+2. 在 `$DSH_HOME/profiles/<profile>/cordis.patch.yml` 追加：
    ```yaml
    - insert:
        - id: dsh-plugin-manager
          name: 'dsh-plugin-manager'
    ```
+   （profile 默认 `web`，可用环境变量 `DSH_PROFILE` 覆盖；DSH home 可用 `-DshHome` 参数或 `DSH_HOME` 环境变量覆盖。）
 
-3. 重启 dsh。Host 半体（webServer 路由）热生效；Client 半体（设置页）在 boot 时由 `dsh-client-modules` 扫描加载，需重启后刷新页面生效。
+> 提示：Host 半体（webServer 路由）改 `cordis.patch.yml` 后热生效；Client 半体（设置页）在 boot 时由 `dsh-client-modules` 扫描加载，需重启后刷新页面。
+
+### 给插件作者的命名约定（避免冲突）
+
+每个第三方插件都挂到同一份 `cordis.patch.yml` / `node_modules`，必须保证以下**全局唯一**，否则会相互覆盖或注册报错：
+
+| 命名对象 | 约定（本插件取值） | 冲突后果 |
+|---|---|---|
+| 包名 / row id / 设置页 slot id | `dsh-<插件名>`（`dsh-plugin-manager`） | 同名 → node_modules 链接与 patch row 互相覆盖 |
+| HTTP 路由前缀 | `/<包名>/<动作>`（`/dsh-plugin-manager/scan` 等） | 同名路由注册会 throw |
+
+`install.ps1` / `install.sh` 是**各自仓库根目录的普通文件**，用户在各自的 clone 目录里执行，不会互相冲突；只要坚持「一个插件一个唯一前缀」，多插件共存安全。
 
 ## 为什么 Host 与 Client 挂载位置相同
 

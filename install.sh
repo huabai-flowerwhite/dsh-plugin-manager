@@ -1,78 +1,68 @@
 #!/usr/bin/env bash
-# dsh-plugin-manager — POSIX 安装脚本 (macOS / Linux)
+# install.sh — install dsh-plugin-manager into DeepSeek Harness (Linux/macOS)
 #
-# 作用：把本插件挂载到当前 dsh 部署，启动 dsh 后自动加载（设置页「第三方插件」）。
-#   1. 在 $DSH_HOME/profiles/node_modules 下建立 symlink 指向本插件目录
-#   2. 在 $DSH_HOME/profiles/web/cordis.patch.yml 追加 insert row（幂等，不重复）
-#   3. 提示重启 dsh
+# Usage (inside the cloned directory):
+#   bash install.sh
+#   # or override DSH home / profile:
+#   DSH_HOME=/path/to/.dsh bash install.sh
+#   DSH_PROFILE=headless bash install.sh
 #
-# 用法：
-#   bash install.sh            # 使用 DSH_HOME 或 ~/.dsh
-#   DSH_HOME=/path bash install.sh
+# Idempotent: links the package into node_modules and appends an insert row
+# to cordis.patch.yml.
+#
+# $DSH_HOME defaults to $HOME/.dsh; $DSH_PROFILE defaults to 'web'.
 
 set -euo pipefail
 
-plugin_name="dsh-plugin-manager"
-plugin_source="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PLUGIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DSH_HOME="${DSH_HOME:-$HOME/.dsh}"
+PROFILE="${DSH_PROFILE:-web}"
+PROFILE_DIR="$DSH_HOME/profiles/$PROFILE"
 
-# ---- resolve DSH_HOME ----
-if [[ -z "${DSH_HOME:-}" ]]; then
-  if [[ -n "${HOME:-}" ]]; then
-    DSH_HOME="$HOME/.dsh"
-  else
-    echo "ERROR: cannot determine DSH home; set DSH_HOME" >&2
+if [ ! -d "$PROFILE_DIR" ]; then
+    echo "[dsh-plugin-manager] profile dir not found: $PROFILE_DIR"
+    echo "  Run dsh at least once first (dsh web), then re-run this script."
     exit 1
-  fi
-fi
-if [[ ! -d "$DSH_HOME" ]]; then
-  echo "ERROR: DSH home not found: $DSH_HOME (set DSH_HOME)" >&2
-  exit 1
 fi
 
-profiles_node_modules="$DSH_HOME/profiles/node_modules"
-target="$profiles_node_modules/$plugin_name"
-profile_web="$DSH_HOME/profiles/web"
-patch_file="$profile_web/cordis.patch.yml"
+# ---- 1) node_modules symlink -> plugin directory ----
+NODE_MODULES="$DSH_HOME/profiles/node_modules"
+LINK="$NODE_MODULES/dsh-plugin-manager"
+mkdir -p "$NODE_MODULES"
 
-echo "DSH home       : $DSH_HOME"
-echo "Plugin source  : $plugin_source"
-
-# ---- 1. symlink into profiles/node_modules ----
-mkdir -p "$profiles_node_modules"
-if [[ -e "$target" || -L "$target" ]]; then
-  if [[ -L "$target" && "$(readlink "$target")" == "$plugin_source" ]]; then
-    echo "[ok] symlink already points at this source: $target"
-  else
-    echo "WARN: $target exists but is not a symlink to this source; leaving it in place." >&2
-    echo "      Remove it first if you want this install to manage the link." >&2
-  fi
+if [ -L "$LINK" ]; then
+    if [ "$(readlink "$LINK")" = "$PLUGIN_DIR" ]; then
+        echo "[dsh-plugin-manager] already linked to this directory."
+    else
+        rm "$LINK"
+        ln -s "$PLUGIN_DIR" "$LINK"
+        echo "[dsh-plugin-manager] symlink updated -> $PLUGIN_DIR"
+    fi
+elif [ -e "$LINK" ]; then
+    echo "[dsh-plugin-manager] $LINK exists and is not a symlink; remove it manually, then re-run."
+    exit 1
 else
-  ln -s "$plugin_source" "$target"
-  echo "[ok] symlink created: $target"
+    ln -s "$PLUGIN_DIR" "$LINK"
+    echo "[dsh-plugin-manager] symlink created -> $PLUGIN_DIR"
 fi
 
-# ---- 2. patch insert row (idempotent) ----
-block=$(cat <<EOF
+# ---- 2) append insert row to cordis.patch.yml ----
+PATCH="$PROFILE_DIR/cordis.patch.yml"
+touch "$PATCH"
+if grep -q 'id:[[:space:]]*dsh-plugin-manager' "$PATCH"; then
+    echo "[dsh-plugin-manager] cordis.patch.yml already contains this plugin row; skipped."
+else
+    cat >> "$PATCH" <<'EOF'
 
-# dsh plugin manager — 第三方插件管理器（设置页「第三方插件」）
-# 前置：$DSH_HOME/profiles/node_modules/$plugin_name -> $plugin_source
+# dsh plugin manager - host composition (settings page: third-party plugins)
 - insert:
-    - id: $plugin_name
-      name: '$plugin_name'
+    - id: dsh-plugin-manager
+      name: 'dsh-plugin-manager'
 EOF
-)
-
-mkdir -p "$profile_web"
-if [[ ! -f "$patch_file" ]]; then
-  printf '%s\n' "$block" > "$patch_file"
-  echo "[ok] created $patch_file with insert row"
-elif grep -q "name: '$plugin_name'" "$patch_file"; then
-  echo "[ok] insert row already present in $patch_file"
-else
-  printf '\n%s\n' "$block" >> "$patch_file"
-  echo "[ok] appended insert row to $patch_file"
+    echo "[dsh-plugin-manager] wrote: $PATCH"
 fi
 
 echo ""
-echo "Install complete. Restart dsh, then open Settings -> 第三方插件."
-echo "Host half (webServer routes) loads on boot; the settings page loads after restart + browser refresh."
+echo "[dsh-plugin-manager] Install complete."
+echo "  Restart dsh: press Ctrl+C on the running dsh, then run: dsh web"
+echo "  After restart: Settings -> 第三方插件 page appears (pick a plugin library folder, scan, enable/disable)."

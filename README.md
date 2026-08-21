@@ -43,6 +43,8 @@ dsh-plugin-manager/
 4. 在列表中点击「关闭 / 启动」切换插件状态，重启 dsh 后生效。
 5. 可参考目录中的How‑to Showcase.png。
 
+   ![How‑to Showcase](<How‑to Showcase.png>)
+
 ## 安装（一条命令）
 
 本插件是 **npm 包 + host composition row** 形态：设置页「第三方插件」全局加载，重启后自动加载。

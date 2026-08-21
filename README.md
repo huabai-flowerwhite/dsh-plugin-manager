@@ -11,6 +11,17 @@
 - 本插件针对部署的“持久化”插件，提供搜索插件并一键关闭/启动功能。
 - 建议可以先按照dsh plugin design插件对已部署的插件进行“持久化”、“独立”化改造后使用。
 
+## 使用方法
+
+1. 启动 dsh（本插件随 host composition 自动加载）。
+2. 进入「设置 → 第三方插件」。
+3. 点击「选择文件夹」选择第三方插件库文件夹（或手动粘贴路径），点击「扫描」。
+4. 在列表中点击「关闭 / 启动」切换插件状态，重启 dsh 后生效。
+5. 可参考目录中的How‑to Showcase.png。
+
+   ![How‑to Showcase](<How‑to Showcase.png>)
+
+
 ## 目录结构
 
 ```text
@@ -34,16 +45,6 @@ dsh-plugin-manager/
   - `POST /dsh-plugin-manager/toggle` — 关闭/启动某个插件（写 `cordis.patch.yml` 的 `disabled: true`，写前自动备份 `.bak`）。
   - `GET /dsh-plugin-manager/status` — 返回当前 patch 路径与各插件启停状态。
 - **Client 半体**：设置页「第三方插件」，含文件夹选择、扫描、插件列表、启停开关。
-
-## 使用方法
-
-1. 启动 dsh（本插件随 host composition 自动加载）。
-2. 进入「设置 → 第三方插件」。
-3. 点击「选择文件夹」选择第三方插件库文件夹（或手动粘贴路径），点击「扫描」。
-4. 在列表中点击「关闭 / 启动」切换插件状态，重启 dsh 后生效。
-5. 可参考目录中的How‑to Showcase.png。
-
-   ![How‑to Showcase](<How‑to Showcase.png>)
 
 ## 安装（一条命令）
 

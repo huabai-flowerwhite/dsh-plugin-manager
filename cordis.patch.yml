@@ -1,0 +1,13 @@
+# dsh plugin manager — 挂载参考（host composition insert）
+#
+# 把本包挂到 host composition（web profile 的 cordis.patch.yml）：
+#   - Host 半体（webServer 路由：scan / toggle / status）→ 全局能力
+#   - Client 半体（settings.section 设置页）→ 全局 UI（dsh-client-modules 扫描 dsh.client）
+#
+# 前置：本包必须是 node_modules 可解析的包（$DSH_HOME/profiles/node_modules/dsh-plugin-manager -> 本目录，
+#       或发布到 npm 后 npm install dsh-plugin-manager）。
+#
+# 用法：把下面这段 insert 合并进 $DSH_HOME/profiles/web/cordis.patch.yml，然后重启 dsh。
+- insert:
+    - id: dsh-plugin-manager
+      name: 'dsh-plugin-manager'

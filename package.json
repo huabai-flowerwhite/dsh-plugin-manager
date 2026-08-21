@@ -1,0 +1,28 @@
+{
+  "name": "dsh-plugin-manager",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "dsh plugin manager — 第三方插件管理器：选择第三方插件库文件夹、搜索其中所有第三方插件、一键启停第三方插件（cordis.patch.yml disabled 标记）。",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22 <25"
+  },
+  "exports": {
+    ".": "./src/index.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web"
+    },
+    "compatibility": {
+      "apiLevel": 1,
+      "harness": ">=0.1.0-rc.7"
+    }
+  }
+}

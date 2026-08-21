@@ -1,0 +1,23 @@
+# 内部设计文档，不对外公开
+design.md
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-error.log*
+package-lock.json
+*.tgz
+
+# 系统/编辑器
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp
+*.swo
+
+# 日志与临时文件
+*.log
+tmp/
+temp/
